@@ -308,22 +308,21 @@ describe("Packet Stress, Fuzzing & Boundary Verification Suite", () => {
             }
         })
 
-        it("handles extreme negative and positive signed 16-bit coordinates for food and calcFoodId", () => {
+        it("handles extreme unsigned 16-bit coordinates for food and calcFoodId", () => {
             const extremes = [
-                { x: -32768, y: -32768 },
-                { x: 32767, y: 32767 },
-                { x: -32768, y: 32767 },
-                { x: 32767, y: -32768 },
                 { x: 0, y: 0 },
+                { x: 65535, y: 65535 },
+                { x: 0, y: 65535 },
+                { x: 65535, y: 0 },
+                { x: 32768, y: 32768 },
             ]
-
             for (const { x, y } of extremes) {
                 const writer = new BinaryWriter()
                     .writeUint16(0)
                     .writeUint8(102) // 'f'
                     .writeUint8(1) // color
-                    .writeInt16(x)
-                    .writeInt16(y)
+                    .writeUint16(x)
+                    .writeUint16(y)
                     .writeUint8(3) // size
 
                 const packet = decodePacket(writer.toUint8Array())

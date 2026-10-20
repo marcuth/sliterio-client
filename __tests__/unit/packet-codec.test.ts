@@ -249,17 +249,17 @@ describe("Packet Codec Suite", () => {
                 .writeUint8(102) // 'f'
                 .writeUint8(4) // color
                 .writeInt16(150) // x
-                .writeInt16(-200) // y
+                .writeUint16(200) // y
                 .writeUint8(2) // size
             const pF = decodePacket(writer.toUint8Array())
             expect(pF.type).toBe("food_spawn")
             if (pF.type === "food_spawn") {
                 expect(pF.x).toBe(150)
-                expect(pF.y).toBe(-200)
+                expect(pF.y).toBe(200)
                 expect(pF.color).toBe(4)
                 expect(pF.size).toBe(2)
                 expect(pF.isTurbo).toBe(false)
-                expect(pF.id).toBe(-200 * 21600 * 3 + 150)
+                expect(pF.id).toBe(200 * 21600 * 3 + 150)
             }
 
             const writerB = new BinaryWriter()
@@ -301,16 +301,16 @@ describe("Packet Codec Suite", () => {
             const writer = new BinaryWriter()
                 .writeUint16(0)
                 .writeUint8(99) // 'c'
-                .writeInt16(150)
-                .writeInt16(-250)
+                .writeUint16(150)
+                .writeUint16(250)
                 .writeUint16(42)
             const packet = decodePacket(writer.toUint8Array())
             expect(packet.type).toBe("food_eaten")
             if (packet.type === "food_eaten") {
                 expect(packet.x).toBe(150)
-                expect(packet.y).toBe(-250)
+                expect(packet.y).toBe(250)
                 expect(packet.eaterSnakeId).toBe(42)
-                expect(packet.id).toBe(-250 * 21600 * 3 + 150)
+                expect(packet.id).toBe(250 * 21600 * 3 + 150)
             }
         })
 

@@ -173,8 +173,8 @@ export function encodeSnakeFullness(snakeId: number, fam: number, timeDelta: num
 export function encodeFoodSpawnNatural(food: SimulatedFood, timeDelta: number = 0): Uint8Array {
     return createPacketWriter("f", timeDelta)
         .writeUint8(food.color & 0xff)
-        .writeInt16(Math.round(food.x))
-        .writeInt16(Math.round(food.y))
+        .writeUint16(Math.round(food.x))
+        .writeUint16(Math.round(food.y))
         .writeUint8(food.size & 0xff)
         .toUint8Array()
 }
@@ -182,8 +182,8 @@ export function encodeFoodSpawnNatural(food: SimulatedFood, timeDelta: number = 
 export function encodeFoodSpawnTurbo(food: SimulatedFood, timeDelta: number = 0): Uint8Array {
     return createPacketWriter("b", timeDelta)
         .writeUint8(food.color & 0xff)
-        .writeInt16(Math.round(food.x))
-        .writeInt16(Math.round(food.y))
+        .writeUint16(Math.round(food.x))
+        .writeUint16(Math.round(food.y))
         .writeUint8(food.size & 0xff)
         .toUint8Array()
 }
@@ -193,15 +193,15 @@ export function encodeFoodBatch(foods: SimulatedFood[], timeDelta: number = 0): 
     for (const food of foods) {
         writer
             .writeUint8(food.color & 0xff)
-            .writeInt16(Math.round(food.x))
-            .writeInt16(Math.round(food.y))
+            .writeUint16(Math.round(food.x))
+            .writeUint16(Math.round(food.y))
             .writeUint8(food.size & 0xff)
     }
     return writer.toUint8Array()
 }
 
 export function encodeFoodEaten(x: number, y: number, eaterSnakeId?: number, timeDelta: number = 0): Uint8Array {
-    const writer = createPacketWriter("c", timeDelta).writeInt16(Math.round(x)).writeInt16(Math.round(y))
+    const writer = createPacketWriter("c", timeDelta).writeUint16(Math.round(x)).writeInt16(Math.round(y))
     if (eaterSnakeId !== undefined) {
         writer.writeUint16(eaterSnakeId & 0xffff)
     }
@@ -212,8 +212,8 @@ export function encodePreyAdd(prey: SimulatedPrey, timeDelta: number = 0): Uint8
     return createPacketWriter("y", timeDelta)
         .writeUint16(prey.id)
         .writeUint8(prey.color & 0xff)
-        .writeInt16(Math.round(prey.x))
-        .writeInt16(Math.round(prey.y))
+        .writeUint16(Math.round(prey.x))
+        .writeUint16(Math.round(prey.y))
         .writeUint8(prey.size & 0xff)
         .toUint8Array()
 }
@@ -229,8 +229,8 @@ export function encodePreyUpdate(
     const angleByte = Math.floor((normalizeAngle(angle) / (Math.PI * 2)) * 256) & 0xff
     return createPacketWriter("j", timeDelta)
         .writeUint16(preyId)
-        .writeInt16(Math.round(x))
-        .writeInt16(Math.round(y))
+        .writeUint16(Math.round(x))
+        .writeUint16(Math.round(y))
         .writeUint8(angleByte)
         .writeUint8(Math.round(speed) & 0xff)
         .toUint8Array()

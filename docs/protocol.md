@@ -5,7 +5,7 @@ This document describes the binary WebSocket protocol as implemented by this lib
 ## Conventions
 
 - Transport: WebSocket, binary frames (`binaryType = "arraybuffer"`).
-- All multi-byte integers are **Big-Endian**. `u8`, `u16`, `i16`, `u24` below refer to that encoding.
+- All multi-byte integers are **Big-Endian**. `u8`, `u16`, `u16`, `u24` below refer to that encoding.
 - Opcodes are single ASCII characters on the inbound side.
 - World coordinates sent as `u24` are scaled: `world = raw / 5` (`COORDINATE_SCALE`).
 - Angles use different resolutions depending on the packet:
@@ -94,11 +94,11 @@ The client sends a ping every `pingIntervalMs` (default 250 ms) and only transmi
 | `n` | Snake grow | `id u16, x u16, y u16`. |
 | `N` | Snake grow (ext) | `id u16, x u24, y u24` (x, y / 5). |
 | `h` | Fullness | `id u16, fam u16`. |
-| `f` `b` | Food spawn (natural / turbo) | `color u8, x i16, y i16, size u8`. |
-| `F` | Food batch | Repeated `color u8, x i16, y i16, size u8`. |
-| `c` | Food eaten | `x i16, y i16, eaterId u16?`. |
-| `y` | Prey add / remove | Remove: `id u16`. Add: `id u16, color u8, x i16, y i16, size u8?`. |
-| `j` | Prey update | `id u16, x i16, y i16, angle u8, speed u8`. |
+| `f` `b` | Food spawn (natural / turbo) | `color u8, x u16, y u16, size u8`. |
+| `F` | Food batch | Simple mode: repeated `color u8, x u16, y u16, size u8`. Production: `sectorX u8, sectorY u8`, then repeated `color u8, dx u8, dy u8, size u8` with `x = sectorX * sectorSize + dx` (same for y). |
+| `c` | Food eaten | `x u16, y u16, eaterId u16?`. |
+| `y` | Prey add / remove | Remove: `id u16`. Add: `id u16, color u8, x u16, y u16, size u8?`. |
+| `j` | Prey update | `id u16, x u16, y u16, angle u8, speed u8`. |
 | `l` | Leaderboard | `inTop10 u8, rank u16, total u16`, then entries `score u16, fam u8, nickLen u8, nick`. |
 | `v` | Death | `reason u8?`: `0` normal, `1` new high score, `2` disconnected. |
 | `k` | Kill stats | `kills u16` (or `u8`). |
@@ -123,7 +123,7 @@ Foods have no id on the wire. The library derives one as `y * gameRadius * 3 + x
 import { decodePacket, encodeAngle, encodeBoost, decodeSlitherSecret } from "@marcuth/slitherio"
 
 const packet = decodePacket(bytes)          // simple mode
-const prod = decodePacket(bytes, true)      // production subpacket
+const prod = decodePacket(bytes, true, 300) // production subpacket (sectorSize from packet "a")
 const steer = encodeAngle(Math.PI / 2)      // Uint8Array [62]
 const boost = encodeBoost(true)             // Uint8Array [253]
 const token = decodeSlitherSecret(challenge)

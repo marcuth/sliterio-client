@@ -425,7 +425,7 @@ export class SlitherClient extends TypedEventEmitter<SlitherClientEvents> {
 
     private processDecodedBuffer(buffer: Uint8Array, isProd: boolean): void {
         try {
-            const packet = decodePacket(buffer, isProd)
+            const packet = decodePacket(buffer, isProd, this.gameState.world.sectorSize)
 
             // 0. Initial Setup Handling
             if (packet.type === "initial_setup") {

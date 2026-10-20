@@ -55,6 +55,7 @@ function toUint8Array(input: Uint8Array | ArrayBuffer | ArrayBufferView | Buffer
 export function decodePacket(
     buffer: Uint8Array | ArrayBuffer | ArrayBufferView | Buffer,
     isProduction: boolean = false,
+    sectorSize: number = 480,
 ): InboundPacket {
     const bytes = toUint8Array(buffer)
 
@@ -397,8 +398,8 @@ export function decodePacket(
             case InboundOpcode.FOOD_NATURAL:
             case InboundOpcode.FOOD_TURBO: {
                 const color = reader.readUint8()
-                const x = reader.readInt16()
-                const y = reader.readInt16()
+                const x = reader.readUint16()
+                const y = reader.readUint16()
                 const size = reader.readUint8()
                 const id = calcFoodId(x, y)
                 return {
@@ -417,10 +418,23 @@ export function decodePacket(
             // 9. Food Batch ('F')
             case InboundOpcode.FOOD_BATCH: {
                 const foods: FoodRecord[] = []
+                if (isProduction) {
+                    // Official layout: sector (x, y) followed by 4-byte records (color, dx, dy, size)
+                    const sectorX = reader.readUint8()
+                    const sectorY = reader.readUint8()
+                    while (reader.remaining >= 4) {
+                        const color = reader.readUint8()
+                        const x = sectorX * sectorSize + reader.readUint8()
+                        const y = sectorY * sectorSize + reader.readUint8()
+                        const size = reader.readUint8()
+                        foods.push({ id: calcFoodId(x, y), color, x, y, size })
+                    }
+                    return { type: "food_batch", opcode: "F", timestamp, foods }
+                }
                 while (reader.remaining >= 6) {
                     const color = reader.readUint8()
-                    const x = reader.readInt16()
-                    const y = reader.readInt16()
+                    const x = reader.readUint16()
+                    const y = reader.readUint16()
                     const size = reader.readUint8()
                     foods.push({
                         id: calcFoodId(x, y),
@@ -440,8 +454,8 @@ export function decodePacket(
 
             // 10. Food Eaten ('c')
             case InboundOpcode.FOOD_EATEN: {
-                const x = reader.readInt16()
-                const y = reader.readInt16()
+                const x = reader.readUint16()
+                const y = reader.readUint16()
                 const id = calcFoodId(x, y)
                 const eaterSnakeId = reader.hasRemaining(2) ? reader.readUint16() : undefined
                 return {
@@ -467,8 +481,8 @@ export function decodePacket(
                     }
                 }
                 const color = reader.readUint8()
-                const x = reader.readInt16()
-                const y = reader.readInt16()
+                const x = reader.readUint16()
+                const y = reader.readUint16()
                 const size = reader.hasRemaining(1) ? reader.readUint8() : 1
                 return {
                     type: "prey_add",
@@ -485,8 +499,8 @@ export function decodePacket(
             // 12. Prey Trajectory Update ('j')
             case InboundOpcode.PREY_UPDATE: {
                 const preyId = reader.readUint16()
-                const x = reader.readInt16()
-                const y = reader.readInt16()
+                const x = reader.readUint16()
+                const y = reader.readUint16()
                 const rawAngle = reader.readUint8()
                 const speed = reader.readUint8()
                 return {
