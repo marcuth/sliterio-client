@@ -11,6 +11,7 @@ A fully-typed TypeScript SDK for [Slither.io](https://slither.io): connect to ga
 - **Movement helpers**: `turnTo`, `turnToDegrees`, `moveTo`, `setBoost`, with dirty-checking so duplicate packets are never sent.
 - **Live game state**: your snake, other snakes, food, prey, leaderboard and arena bounds.
 - **Spatial hash grid** for nearest-food, food-cluster and obstacle queries.
+- **Collision avoidance**: `queries.findSafeHeading` picks a heading that stays clear of other snakes and the arena edge, accounting for how fast your snake can turn.
 - **Protocol codec**: `decodePacket`, `encode*` functions and a Big-Endian reader/writer with 24-bit support.
 - **Mock server** (`MockSlitherServer`) and scenarios for offline tests and CI.
 
@@ -39,7 +40,14 @@ client.on("tick", (state) => {
     if (!me) return
 
     const food = client.queries.findNearestFood(me.head, { maxDistance: 600 })
-    if (food) client.moveTo(food)
+    const desired = food ? Math.atan2(food.y - me.head.y, food.x - me.head.x) : me.angle
+
+    // Steer toward the food, detouring around other snakes
+    const heading = client.queries.findSafeHeading(me.head, desired, {
+        selfSnakeId: me.id,
+        currentAngle: me.angle,
+    })
+    client.turnTo(heading.angle)
 })
 
 client.on("snake_died", (e) => {

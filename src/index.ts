@@ -30,6 +30,8 @@ export type {
     FoodCluster,
     Obstacle,
     ObstacleScanOptions,
+    SafeHeading,
+    SafeHeadingOptions,
 } from "./math/spatial-grid.js"
 
 // Domain Models

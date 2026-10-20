@@ -307,7 +307,7 @@ async function main() {
         if (client.state === "READY") {
             console.log(`🤝 Handshake resolvido com sucesso! Estado: ${client.state}`)
             try {
-                await client.spawn("AlphaSlither", 9)
+                await client.spawn("@marcuth/slitherio", 9)
             } catch (err: any) {
                 console.warn(`Aviso no spawn: ${err.message}`)
             }
@@ -318,6 +318,8 @@ async function main() {
 
             // Loop Autônomo de IA da biblioteca a cada 100ms
             let tickCount = 0
+            let lastAvoidLog = 0
+            let lastHeading: number | undefined
             aiInterval = setInterval(() => {
                 const self = client.gameState.self
                 if (!self || self.isDead) return
@@ -330,15 +332,26 @@ async function main() {
                     preferEjected: true,
                 })
 
-                if (nearestFood) {
-                    const nav = client.moveTo({ x: nearestFood.x, y: nearestFood.y })
+                // Rumo desejado: em direção à comida, ou seguindo reto quando não há comida por perto
+                const desiredAngle = nearestFood
+                    ? Math.atan2(nearestFood.y - self.head.y, nearestFood.x - self.head.x)
+                    : self.angle
 
-                    // Turbo inteligente: se a comida estiver próxima e temos massa suficiente
-                    if (nav.distance < 200 && self.score > 20 && !client.isBoosting) {
-                        client.boost()
-                    } else if (nav.distance >= 200 && client.isBoosting) {
-                        client.stopBoost()
-                    }
+                // Desvia de corpos e cabeças de outras cobras e da borda da arena
+                const heading = client.queries.findSafeHeading(self.head, desiredAngle, {
+                    selfSnakeId: self.id,
+                    currentAngle: self.angle,
+                    lookahead: 520,
+                    previousAngle: lastHeading,
+                })
+                lastHeading = heading.avoiding ? heading.angle : undefined
+                client.turnTo(heading.angle)
+
+                if (heading.avoiding && Date.now() - lastAvoidLog > 2000) {
+                    lastAvoidLog = Date.now()
+                    console.log(
+                        heading.trapped ? "⚠️  Cercado! Escolhendo a rota menos ruim" : "↪️  Desviando de um obstáculo",
+                    )
                 }
 
                 // Relatório de status a cada ~2 segundos (20 ticks)

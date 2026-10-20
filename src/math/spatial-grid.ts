@@ -35,6 +35,36 @@ export interface Obstacle {
     radius: number
 }
 
+export interface SafeHeadingOptions extends ObstacleScanOptions {
+    /** How far ahead each candidate heading is checked (default 450). */
+    lookahead?: number
+    /** Number of candidate headings tested around the circle (default 48). */
+    candidates?: number
+    /** Extra clearance kept from other snakes' bodies, added to their width (default 35). */
+    bodyMargin?: number
+    /** Extra clearance kept from the arena edge (default 250). */
+    boundaryMargin?: number
+    /** How far ahead enemy heads are projected to anticipate where they will be (default 120, checked at 1x and 2x). */
+    headLead?: number
+    /** Current heading of the controlled snake. With `turnRate` the path takes the time needed to turn into account. */
+    currentAngle?: number
+    /** Radians the snake can turn while travelling 40 units (default 0.23, typical for a small snake). */
+    turnRate?: number
+    /** Heading returned by the previous call; staying near it avoids jittering between two detours. */
+    previousAngle?: number
+}
+
+export interface SafeHeading {
+    /** Heading in radians to steer to. */
+    angle: number
+    /** True when the desired heading was blocked and the result is a detour. */
+    avoiding: boolean
+    /** True when every heading is blocked, so the result is the least bad one. */
+    trapped: boolean
+    /** Smallest distance to a hazard along the chosen heading (Infinity when clear). */
+    clearance: number
+}
+
 export interface ObstacleScanOptions {
     snakes?: Iterable<Snake>
     selfSnakeId?: number | null
@@ -478,5 +508,134 @@ export class WorldQueries {
         }
 
         return normalizeAngle(Math.atan2(forceY, forceX))
+    }
+
+    /**
+     * Picks the heading closest to `desiredAngle` whose path ahead stays clear of other snakes and the arena edge.
+     *
+     * Several headings are sampled around the circle; each is walked in steps and rejected if it comes too close to
+     * an enemy body, a projected enemy head or the boundary. Among the safe ones, the one closest to the desired
+     * heading wins, preferring more clearance. When nothing is safe the heading with the most clearance is returned.
+     */
+    public findSafeHeading(from: Point, desiredAngle: number, options?: SafeHeadingOptions): SafeHeading {
+        const lookahead = options?.lookahead ?? 450
+        const candidates = Math.max(8, options?.candidates ?? 48)
+        const bodyMargin = options?.bodyMargin ?? 45
+        const boundaryMargin = options?.boundaryMargin ?? 250
+        const headLead = options?.headLead ?? 120
+
+        const worldInfo = this.getWorldInfo ? this.getWorldInfo() : undefined
+        const center = options?.worldCenter ?? worldInfo?.center
+        const radius = options?.worldRadius ?? worldInfo?.gameRadius
+        const selfSnakeId = options?.selfSnakeId ?? null
+        const selfTailTolerance = options?.selfTailTolerance ?? 8
+        const reach = lookahead + 300
+
+        // Hazards: [x, y, safe distance] circles, plus body segments kept as segments.
+        const circles: Array<{ x: number; y: number; w: number }> = []
+        const segments: Array<{ a: Point; b: Point; w: number }> = []
+
+        const snakes = options?.snakes ?? (this.getSnakes ? this.getSnakes() : [])
+        for (const snake of snakes) {
+            if (snake.isDead) continue
+            const isSelf = selfSnakeId !== null && snake.id === selfSnakeId
+            // Width grows with the segment count, as in the official client
+            const width = 14.5 * Math.min(6, 1 + Math.max(0, snake.body.length - 2) / 106)
+
+            if (!isSelf) {
+                circles.push({ x: snake.head.x, y: snake.head.y, w: width + 25 })
+                for (const lead of [headLead, headLead * 2]) {
+                    circles.push({
+                        x: snake.head.x + Math.cos(snake.angle) * lead,
+                        y: snake.head.y + Math.sin(snake.angle) * lead,
+                        w: width + 25,
+                    })
+                }
+            }
+
+            for (let i = isSelf ? selfTailTolerance : 0; i < snake.body.length - 1; i++) {
+                const a = snake.body[i]
+                const b = snake.body[i + 1]
+                if (distanceToSegment(from, a, b) < reach) {
+                    segments.push({ a, b, w: width })
+                }
+            }
+        }
+
+        const step = 40
+        const steps = Math.max(1, Math.floor(lookahead / step))
+        let best: { angle: number; score: number; clearance: number } | null = null
+        let bestUnsafe: { angle: number; clearance: number } | null = null
+        let desiredClear = false
+
+        for (let c = 0; c < candidates; c++) {
+            // Spread candidates symmetrically around the desired heading
+            const offset = Math.ceil(c / 2) * ((2 * Math.PI) / candidates) * (c % 2 === 0 ? 1 : -1)
+            const angle = normalizeAngle(desiredAngle + offset)
+            const limitTurn = options?.currentAngle !== undefined && options?.turnRate !== undefined
+            const turnRate = options?.turnRate ?? 0.23
+            let heading = options?.currentAngle ?? angle
+            let px = from.x
+            let py = from.y
+
+            let clearance = Infinity
+            for (let k = 1; k <= steps; k++) {
+                if (limitTurn) {
+                    // Move toward the candidate heading no faster than the snake can actually turn
+                    let diff = angle - heading
+                    diff = Math.atan2(Math.sin(diff), Math.cos(diff))
+                    heading += Math.max(-turnRate, Math.min(turnRate, diff))
+                } else {
+                    heading = angle
+                }
+                px += Math.cos(heading) * step
+                py += Math.sin(heading) * step
+                const p = { x: px, y: py }
+                let free = Infinity
+
+                if (center && radius !== undefined) {
+                    free = Math.min(free, radius - boundaryMargin - Math.hypot(px - center.x, py - center.y))
+                }
+                // The first steps only need a thin margin so a snake already close to a hazard can still pull away;
+                // the full margin applies further ahead.
+                const margin = 12 + (bodyMargin - 12) * Math.min(1, (k - 1) / 3)
+                for (const circle of circles) {
+                    free = Math.min(free, Math.hypot(px - circle.x, py - circle.y) - circle.w - margin)
+                }
+                for (const seg of segments) {
+                    free = Math.min(free, distanceToSegment(p, seg.a, seg.b) - seg.w - margin)
+                }
+
+                if (free < clearance) clearance = free
+                if (clearance < 0) {
+                    // Rank blocked headings by how far they get, then by how deep into the hazard they end up
+                    clearance = -1e6 + (k - 1) * 1e3 + clearance
+                    break
+                }
+            }
+
+            const blocked = clearance < 0
+            if (c === 0) desiredClear = !blocked
+
+            if (blocked) {
+                if (!bestUnsafe || clearance > bestUnsafe.clearance) bestUnsafe = { angle, clearance }
+                continue
+            }
+
+            // Closer to the desired heading is better; clearance breaks ties
+            let score = -Math.abs(offset) + Math.min(clearance, 200) / 400
+            if (options?.previousAngle !== undefined) {
+                let drift = angle - options.previousAngle
+                drift = Math.atan2(Math.sin(drift), Math.cos(drift))
+                score -= Math.abs(drift) * 0.5
+            }
+            if (!best || score > best.score) best = { angle, score, clearance }
+        }
+
+        if (best) {
+            return { angle: best.angle, avoiding: !desiredClear, trapped: false, clearance: best.clearance }
+        }
+        const fallback = bestUnsafe ?? { angle: desiredAngle, clearance: 0 }
+        return { angle: fallback.angle, avoiding: true, trapped: true, clearance: 0 }
     }
 }
