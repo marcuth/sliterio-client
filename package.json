@@ -1,41 +1,52 @@
 {
-  "name": "@marcuth/slitherio",
-  "version": "0.1.0",
-  "type": "commonjs",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "files": [
-    "dist/*",
-    "!/**/__tests__"
-  ],
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsx ./src/index.ts",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "lint": "eslint \"src/**/*.ts\" --fix",
-    "test": "vitest",
-    "test:cov": "vitest run --coverage"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "keywords": [
-    "marcuth"
-  ],
-  "author": "Marcuth",
-  "license": "MIT",
-  "devDependencies": {
-    "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
-    "@types/node": "^26.6.5",
-    "@vitest/coverage-v8": "^5.0.3",
-    "eslint": "^10.12.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.6",
-    "eslint-plugin-unused-imports": "^4.4.1",
-    "prettier": "^3.9.10",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
-  }
+    "name": "@marcuth/slitherio",
+    "version": "0.1.0",
+    "type": "commonjs",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist/*",
+        "!/**/__tests__"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsx ./src/index.ts",
+        "server": "tsx ./scripts/start-server.ts",
+        "example": "tsx ./examples/demo-bot.ts",
+        "visual": "tsx ./examples/visual-bot.ts",
+        "feeder": "tsx ./scripts/feeder-bot.ts",
+        "companion": "tsx ./scripts/companion-bot.ts",
+        "format": "prettier --write \"src/**/*.ts\"",
+        "lint": "eslint \"src/**/*.ts\" --fix",
+        "test": "vitest",
+        "test:cov": "vitest run --coverage"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "keywords": [
+        "marcuth"
+    ],
+    "author": "Marcuth",
+    "license": "MIT",
+    "devDependencies": {
+        "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
+        "@types/node": "^26.6.5",
+        "@vitest/coverage-v8": "^5.0.3",
+        "eslint": "^10.12.0",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-prettier": "^5.5.6",
+        "eslint-plugin-unused-imports": "^4.4.1",
+        "prettier": "^3.9.10",
+        "tsx": "^4.23.15",
+        "typescript": "^5.9.3",
+        "typescript-eslint": "^8.71.1",
+        "vitest": "^5.0.3"
+    },
+    "dependencies": {
+        "@types/ws": "^8.18.2",
+        "puppeteer": "^25.13.0",
+        "ws": "^8.22.0"
+    }
 }
