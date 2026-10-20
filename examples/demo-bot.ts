@@ -318,24 +318,9 @@ async function main() {
 
             // Loop Autônomo de IA da biblioteca a cada 100ms
             let tickCount = 0
-            let lastTickTime = Date.now()
             aiInterval = setInterval(() => {
                 const self = client.gameState.self
                 if (!self || self.isDead) return
-
-                const now = Date.now()
-                const dt = Math.min(0.2, (now - lastTickTime) / 1000)
-                lastTickTime = now
-
-                // Em servidores oficiais de produção, o cliente local avança a cabeça da cobra (dead-reckoning)
-                if (!isMock) {
-                    const speedPerSec = client.isBoosting ? 820 : 340
-                    const moveDist = speedPerSec * dt
-                    self.updateHead(
-                        self.head.x + Math.cos(self.angle) * moveDist,
-                        self.head.y + Math.sin(self.angle) * moveDist,
-                    )
-                }
 
                 tickCount++
 

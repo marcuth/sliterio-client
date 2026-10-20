@@ -8,6 +8,7 @@ import { directionTo, distance, normalizeAngle, radiansToProtocolByte } from "..
 import { GameState } from "../models/game-state.js"
 import { Snake } from "../models/snake.js"
 import { decodePacket } from "../protocol/packet-decoder.js"
+import { ProductionDecoder } from "../protocol/production-decoder.js"
 import {
     encodeAngle,
     encodeBoost,
@@ -16,6 +17,7 @@ import {
     encodeSpawn,
 } from "../protocol/packet-encoder.js"
 import { decodeSlitherSecret } from "../protocol/secret-resolver.js"
+import type { InboundPacket } from "../protocol/types.js"
 import { ClientState, SlitherClientEvents, TypedEventEmitter } from "./events.js"
 
 export { ClientState }
@@ -72,6 +74,7 @@ export class SlitherClient extends TypedEventEmitter<SlitherClientEvents> {
     private _spawnSetupReceived: boolean = false
     private _pendingSpawnTimeout: any = null
     private _isProduction: boolean = false
+    private readonly _productionDecoder = new ProductionDecoder()
 
     constructor(options: SlitherClientOptions = {}) {
         super()
@@ -121,6 +124,7 @@ export class SlitherClient extends TypedEventEmitter<SlitherClientEvents> {
      */
     public connect(url?: string): Promise<void> {
         this.gameState.clear()
+        this._productionDecoder.reset()
         const targetUrl = url ?? this.options.serverUrl
         if (!targetUrl && !this.options.socket) {
             return Promise.reject(new Error("No server URL provided to connect() and no socket pre-configured."))
@@ -424,9 +428,28 @@ export class SlitherClient extends TypedEventEmitter<SlitherClientEvents> {
     }
 
     private processDecodedBuffer(buffer: Uint8Array, isProd: boolean): void {
+        let packets: InboundPacket[]
         try {
-            const packet = decodePacket(buffer, isProd, this.gameState.world.sectorSize)
+            packets = isProd ? this._productionDecoder.decode(buffer) : [decodePacket(buffer, false)]
+        } catch (err: any) {
+            this.reportIngestionError(err)
+            return
+        }
+        for (const packet of packets) {
+            this.processPacket(packet)
+        }
+    }
 
+    private reportIngestionError(err: any): void {
+        if (this.listenerCount("error") > 0) {
+            this.emit("error", err instanceof Error ? err : new Error(String(err)))
+        } else if (this.options.logger) {
+            this.options.logger("warn", `Ingestion error: ${err.message}`)
+        }
+    }
+
+    private processPacket(packet: InboundPacket): void {
+        try {
             // 0. Initial Setup Handling
             if (packet.type === "initial_setup") {
                 this._spawnSetupReceived = true
@@ -510,11 +533,7 @@ export class SlitherClient extends TypedEventEmitter<SlitherClientEvents> {
             this.dispatchGameEvents(events)
             this.emit("tick", this.gameState)
         } catch (err: any) {
-            if (this.listenerCount("error") > 0) {
-                this.emit("error", err instanceof Error ? err : new Error(String(err)))
-            } else if (this.options.logger) {
-                this.options.logger("warn", `Ingestion error: ${err.message}`)
-            }
+            this.reportIngestionError(err)
         }
     }
 

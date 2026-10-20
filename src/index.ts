@@ -63,6 +63,7 @@ export { BinaryWriter } from "./protocol/binary-writer.js"
 
 // Packet Framing Codecs
 export { PacketDecodeError, decodePacket } from "./protocol/packet-decoder.js"
+export { ProductionDecoder } from "./protocol/production-decoder.js"
 export {
     PacketEncodeError,
     encodeAngle,

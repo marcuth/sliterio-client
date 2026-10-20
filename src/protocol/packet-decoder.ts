@@ -55,7 +55,6 @@ function toUint8Array(input: Uint8Array | ArrayBuffer | ArrayBufferView | Buffer
 export function decodePacket(
     buffer: Uint8Array | ArrayBuffer | ArrayBufferView | Buffer,
     isProduction: boolean = false,
-    sectorSize: number = 480,
 ): InboundPacket {
     const bytes = toUint8Array(buffer)
 
@@ -418,19 +417,6 @@ export function decodePacket(
             // 9. Food Batch ('F')
             case InboundOpcode.FOOD_BATCH: {
                 const foods: FoodRecord[] = []
-                if (isProduction) {
-                    // Official layout: sector (x, y) followed by 4-byte records (color, dx, dy, size)
-                    const sectorX = reader.readUint8()
-                    const sectorY = reader.readUint8()
-                    while (reader.remaining >= 4) {
-                        const color = reader.readUint8()
-                        const x = sectorX * sectorSize + reader.readUint8()
-                        const y = sectorY * sectorSize + reader.readUint8()
-                        const size = reader.readUint8()
-                        foods.push({ id: calcFoodId(x, y), color, x, y, size })
-                    }
-                    return { type: "food_batch", opcode: "F", timestamp, foods }
-                }
                 while (reader.remaining >= 6) {
                     const color = reader.readUint8()
                     const x = reader.readUint16()

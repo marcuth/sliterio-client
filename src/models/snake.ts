@@ -31,6 +31,8 @@ export class Snake {
     public fullness: number
     public isBoosting: boolean
     public isDead: boolean
+    /** Exact score reported by the server protocol, when available. */
+    public scoreOverride?: number
 
     constructor(data: SnakeData) {
         this.id = data.id
@@ -84,6 +86,7 @@ export class Snake {
      * Approximate in-game score calculated from length and mass.
      */
     public get score(): number {
+        if (this.scoreOverride !== undefined) return this.scoreOverride
         return Math.floor(15 + this.body.length * 10 + this.normalizedFullness * 10)
     }
 
@@ -145,6 +148,20 @@ export class Snake {
     /**
      * Updates rotation and speed (from 'e' or 'E' packets).
      */
+    /**
+     * Moves the head to a new position, shifting the body so every segment keeps its real position.
+     *
+     * @param grow When true the tail is kept, so the snake gets one segment longer
+     */
+    public advance(x: number, y: number, grow: boolean = false): void {
+        this.head.x = x
+        this.head.y = y
+        this.body.unshift({ x, y })
+        if (!grow && this.body.length > 1) {
+            this.body.pop()
+        }
+    }
+
     public updateRotation(angle: number, targetAngle?: number, speed?: number): void {
         this.angle = normalizeAngle(angle)
         if (targetAngle !== undefined) {

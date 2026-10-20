@@ -146,6 +146,18 @@ export class GameState {
     /**
      * Clears all entities and resets game state.
      */
+    /**
+     * Drops every food pellet inside a sector the server stopped streaming.
+     */
+    private removeFoodInSector(sectorX: number, sectorY: number): void {
+        const size = this.world.sectorSize
+        for (const food of [...this.foods.values()]) {
+            if (Math.floor(food.x / size) === sectorX && Math.floor(food.y / size) === sectorY) {
+                this.removeFood(food.id, food.x, food.y)
+            }
+        }
+    }
+
     public clear(): void {
         this.mySnakeId = null
         this.snakes.clear()
@@ -205,6 +217,7 @@ export class GameState {
                     fullness: packet.fam,
                 })
 
+                if (packet.score !== undefined) snake.scoreOverride = packet.score
                 this.snakes.set(packet.snakeId, snake)
 
                 if (this.mySnakeId === packet.snakeId) {
@@ -240,7 +253,11 @@ export class GameState {
             case "snake_move_ext": {
                 const snake = this.snakes.get(packet.snakeId)
                 if (snake) {
-                    snake.updateHead(packet.x, packet.y)
+                    if ((packet as any).advance) {
+                        snake.advance(packet.x, packet.y)
+                    } else {
+                        snake.updateHead(packet.x, packet.y)
+                    }
                     events.push({ type: "snake_update", snake, updateType: "move" })
                 }
                 break
@@ -249,7 +266,7 @@ export class GameState {
             case "snake_rotate": {
                 const snake = this.snakes.get(packet.snakeId)
                 if (snake) {
-                    snake.updateRotation(packet.angle, packet.wantedAngle, packet.speed)
+                    snake.updateRotation(packet.angle ?? snake.angle, packet.wantedAngle, packet.speed)
                     events.push({ type: "snake_update", snake, updateType: "rotate" })
                 }
                 break
@@ -259,7 +276,11 @@ export class GameState {
             case "snake_grow_ext": {
                 const snake = this.snakes.get(packet.snakeId)
                 if (snake) {
-                    snake.addBodyPart(packet.x, packet.y)
+                    if ((packet as any).fromHead) {
+                        snake.advance(packet.x, packet.y, true)
+                    } else {
+                        snake.addBodyPart(packet.x, packet.y)
+                    }
                     events.push({ type: "snake_update", snake, updateType: "grow" })
                 }
                 break
@@ -269,6 +290,8 @@ export class GameState {
                 const snake = this.snakes.get(packet.snakeId)
                 if (snake) {
                     snake.setFullness(packet.fam)
+                    if (packet.score !== undefined) snake.scoreOverride = packet.score
+                    if (packet.removeTail && snake.body.length > 1) snake.removeTail()
                     events.push({ type: "snake_update", snake, updateType: "fullness" })
                 }
                 break
@@ -376,6 +399,7 @@ export class GameState {
 
             case "sector_remove": {
                 this.activeSectors.delete(`${packet.sectorX}:${packet.sectorY}`)
+                this.removeFoodInSector(packet.sectorX, packet.sectorY)
                 events.push({ type: "sector_remove", sectorX: packet.sectorX, sectorY: packet.sectorY })
                 break
             }

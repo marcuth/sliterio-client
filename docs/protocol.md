@@ -80,53 +80,95 @@ Production spawn (`115`): `[115, 30, clientVersion (u16), 20-byte constant, skin
 
 The client sends a ping every `pingIntervalMs` (default 250 ms) and only transmits a steering byte when it differs from the last one.
 
-## Inbound packets
+## Inbound packets: simple (mock) mode
 
 | Opcode | Name | Payload |
 | --- | --- | --- |
 | `6` | Pre-init challenge | Challenge bytes (>= 65). |
-| `a` | Initial setup | `gameRadius u24, mscps u16, sectorSize u16, sectorCount u16, spangdv u16, nsp1 u16, nsp2 u16, nsp3 u16, mamu u16, mamu2 u16, cst u16, protocolVersion u8?` (default 11). |
-| `s` | Snake add / remove | See below. |
-| `g` | Snake move (relative) | `id u16, x u16, y u16`. |
-| `G` | Snake move (absolute) | `id u16, x u24, y u24` (x, y / 5). |
-| `e` `3` `4` `5` | Snake rotate | `id u16, angle u8, wanted u8?, speed u8?`. |
-| `E` | Snake rotate (hi-res) | `id u16, angle u16, wanted u16?, speed u8?`. |
-| `n` | Snake grow | `id u16, x u16, y u16`. |
-| `N` | Snake grow (ext) | `id u16, x u24, y u24` (x, y / 5). |
+| `a` | Initial setup | `gameRadius u24, mscps u16, sectorSize u16, sectorCount u16, spangdv u16, nsp1 u16, nsp2 u16, nsp3 u16, mamu u16, mamu2 u16, cst u16, protocolVersion u8?`. |
+| `s` | Snake add / remove | Remove: `id u16, reason u8?`. Add: `id u16, skin u8, x u24, y u24, nickLen u8, nick, angle u8, wanted u8, speed u8, fam u16`, then `x u16, y u16` body pairs. |
+| `g` / `G` | Snake move | `id u16, x u16, y u16` / `id u16, x u24, y u24` (x, y / 5). |
+| `e` `3` `4` `5` / `E` | Snake rotate | `id u16, angle u8, wanted u8?, speed u8?` / `id u16, angle u16, ...`. |
+| `n` / `N` | Snake grow | Same coordinates as `g` / `G`. |
 | `h` | Fullness | `id u16, fam u16`. |
-| `f` `b` | Food spawn (natural / turbo) | `color u8, x u16, y u16, size u8`. |
-| `F` | Food batch | Simple mode: repeated `color u8, x u16, y u16, size u8`. Production: `sectorX u8, sectorY u8`, then repeated `color u8, dx u8, dy u8, size u8` with `x = sectorX * sectorSize + dx` (same for y). |
+| `f` `b` / `F` | Food | `color u8, x u16, y u16, size u8` (repeated for `F`). |
 | `c` | Food eaten | `x u16, y u16, eaterId u16?`. |
-| `y` | Prey add / remove | Remove: `id u16`. Add: `id u16, color u8, x u16, y u16, size u8?`. |
-| `j` | Prey update | `id u16, x u16, y u16, angle u8, speed u8`. |
-| `l` | Leaderboard | `inTop10 u8, rank u16, total u16`, then entries `score u16, fam u8, nickLen u8, nick`. |
-| `v` | Death | `reason u8?`: `0` normal, `1` new high score, `2` disconnected. |
-| `k` | Kill stats | `kills u16` (or `u8`). |
-| `p` | Pong | None. |
-| `W` / `w` | Sector add / remove | `sx u8, sy u8`. |
+| `y` / `j` | Prey add, remove / update | See `packet-decoder.ts`. |
+| `l` | Leaderboard | `inTop10 u8, rank u16, total u16`, then `score u16, fam u8, nickLen u8, nick`. |
+| `v` | Death | `reason u8?`. |
+| `k` `p` `W` `w` | Kills, pong, sectors | See `packet-decoder.ts`. |
 
-Unrecognised opcodes are returned as `{ type: "unknown", opcode, payload }`.
+## Inbound packets: official servers
 
-### Snake add / remove (`s`)
+Official servers (protocol 19 at the time of writing) are heavily compressed. The behaviour below was taken from the public game client and verified against live servers; it is implemented by `ProductionDecoder` (`src/protocol/production-decoder.ts`), which keeps the state these packets depend on.
 
-- **Remove**: payload `<= 3` bytes: `id u16, reason u8?`, where `1` = died and `0` = left the viewport.
-- **Add (official layout)**: `id u16, angle u24, 1 unused byte, wanted u24, speed u16 (/10), fam u24, skin u8, x u24, y u24, nickLen u8, nick`. In production this is followed by a length-prefixed cosmetics block and then the body as `dx u8, dy u8` pairs, each `(v - 127) / 2`, accumulated from the head position.
-- **Add (simple layout)**: `id u16, skin u8, x u24, y u24, nickLen u8, nick, angle u8, wanted u8, speed u8, fam u16`, then body points as `x u16, y u16` pairs.
+Three ideas explain most of the format:
 
-### Food ids
+1. **Your own snake has no id.** Short variants of a packet mean "the snake you control" (the snake from the first `s` after `a`).
+2. **Head positions are derived, not sent.** A move packet carries only a 16-bit heading `iang` (`angle = iang / 65536 * 2π`); the new head is the previous head plus `defaultMsl` (42 units) along that heading. If `iang` is omitted, the previous one is reused.
+3. **Food is addressed by sector.** A food id is `(sectorX << 24) | (sectorY << 16) | (dx << 8) | dy`, and `x = sectorX * sectorSize + dx * sectorSize / 256`. The sector of the last food / eaten packet is remembered and reused by shorter packets.
 
-Foods have no id on the wire. The library derives one as `y * gameRadius * 3 + x` (`calcFoodId`) and removes it when a `c` packet arrives at the same coordinates.
+### Setup (`a`)
+
+`gameRadius u24, mscps u16, sectorSize u16, sectorCount u16, spangdv u8 (/10), nsp1 u16 (/100), nsp2 u16 (/100), nsp3 u16 (/100), mamu u16 (/1000), mamu2 u16 (/1000), cst u16 (/1000), protocolVersion u8, defaultMsl u8, ...`.
+
+### Snakes
+
+| Opcode | Payload (after the opcode) |
+| --- | --- |
+| `s` add | `id u16, angle u24, dir u8, wanted u24, speed u16 (/1000), fam u24 (/16777215), skin u8, x u24, y u24 (/5), nickLen u8, nick, skinLen u8, skin..., cosmetic u8`, then the body. |
+| `s` remove | `id u16, killed u8` (payload <= 6 bytes). |
+| `g` | `id u16, iang u16?` (payload 4 bytes with angle, 2 without). |
+| `G` | Own snake: `iang u16?` (payload 2 bytes with angle, 0 without). |
+| `n` / `N` | Like `g` / `G` plus `fam u24` at the end: the snake grew by one segment. |
+| `+` / `=` | Absolute position: `[id u16,] iang u16, x u16, y u16`. |
+| `e` `E` `3` `4` `5` | Rotation, own snake when the payload is <= 2 bytes (else `id u16` first). Remaining bytes by total packet length: see below. |
+| `d` `7` | Own snake rotation: `angle u8, wanted u8, speed u8`. |
+| `h` | `id u16, fam u24`. |
+| `r` | `id u16, fam u24?`: one tail segment removed. |
+| `k` | `id u16, kills u24`. |
+
+Body of an `s` add packet, listed tail to head: one absolute point (`x u24, y u24`, /5), then `dx u8, dy u8` pairs with `(v - 127) / 2` each. In protocol >= 15 the last two bytes are an `iang u16` for the final point instead of a delta pair.
+
+Rotation payloads (all angles `u8 * 2π / 256`, speed `u8 / 18`):
+
+| Total packet length | `e` | `E` / `4` | `3` / `5` |
+| --- | --- | --- | --- |
+| 6 | `angle, wanted, speed` | same | same |
+| 5 or 3 | `angle, speed` | `wanted, speed` | `angle, wanted` |
+| 4 or 2 | `angle` | `wanted` | `3`: `speed` |
+
+### World
+
+| Opcode | Payload |
+| --- | --- |
+| `F` | `sectorX u8, sectorY u8`, then repeated `color u8, dx u8, dy u8, size u8 (/5)`. |
+| `f` / `b` | `[sectorX u8, sectorY u8,] dx u8, dy u8, [color u8,] size u8 (/5)`; sector present when the payload is >= 5 bytes, color when it is 4 or 6. |
+| `c` | `[sectorX u8, sectorY u8,] dx u8, dy u8`; sector omitted when the payload is 2 bytes. |
+| `C` | Like `c`, eaten by the last eater. |
+| `<` | Like `c` plus `eaterId u16` (payload 4 bytes: sector omitted). |
+| `y` | `id u16` removes; `id u16, snakeId u16` eaten; otherwise add: `id u16, color u8, x u24, y u24 (/5), size u8 (/5), dir u8, wanted u24, angle u24, speed u16`. |
+| `j` | `id u16, x u16, y u16` (`1 + v * 3`) followed by optional angle / speed fields chosen by payload length. |
+| `l` | `myPosition u8, rank u16, total u16`, then entries `sct u16, fam u24, color u8, nickLen u8, nick`. |
+| `v` | `reason u8`: `0` died, `1` new high score, `2` disconnected. |
+| `W` / `w` | Sector enter / leave (`sx u8, sy u8`); leaving drops the food of that sector. |
+| `p` | Pong. |
+
+Score is computed as `floor((fpsls[sct] + fam / fmlts[sct] - 1) * 15 - 5)`, where for `i < mscps`: `fmlts[i] = (1 - i / mscps)^2.25` and `fpsls[i] = fpsls[i-1] + 1 / fmlts[i-1]`; `sct` is the number of body segments.
+
+Unrecognised opcodes (for example the minimap `M`) are returned as `{ type: "unknown", opcode, payload }`.
 
 ## Using the codec directly
 
 ```ts
-import { decodePacket, encodeAngle, encodeBoost, decodeSlitherSecret } from "@marcuth/slitherio"
+import { decodePacket, ProductionDecoder, encodeAngle, encodeBoost, decodeSlitherSecret } from "@marcuth/slitherio"
 
 const packet = decodePacket(bytes)          // simple mode
-const prod = decodePacket(bytes, true, 300) // production subpacket (sectorSize from packet "a")
+const decoder = new ProductionDecoder()      // official servers: stateful
+const packets = decoder.decode(subpacket)  // zero or more packets
 const steer = encodeAngle(Math.PI / 2)      // Uint8Array [62]
 const boost = encodeBoost(true)             // Uint8Array [253]
 const token = decodeSlitherSecret(challenge)
 ```
 
-In simple mode `decodePacket` throws `PacketDecodeError` on malformed input; in production mode it returns an `unknown` packet instead, so one bad subpacket never breaks the stream.
+`decodePacket` handles the simple (mock) format and throws `PacketDecodeError` on malformed input. `ProductionDecoder.decode` returns an `unknown` packet instead, so one bad subpacket never breaks the stream.

@@ -141,6 +141,8 @@ export interface InitialSetupPacket extends BaseInboundPacket {
     mamu2: number
     cst: number
     protocolVersion: number
+    /** Distance travelled by a snake head per movement packet (production servers). */
+    defaultMsl?: number
 }
 
 export interface SnakeRemovePacket extends BaseInboundPacket {
@@ -166,6 +168,8 @@ export interface SnakeAddPacket extends BaseInboundPacket {
     nickname: string
     name?: string
     bodyParts: Point2D[]
+    /** In-game score computed by the production decoder. */
+    score?: number
 }
 
 export interface SnakeMovePacket extends BaseInboundPacket {
@@ -174,7 +178,9 @@ export interface SnakeMovePacket extends BaseInboundPacket {
     snakeId: number
     x: number
     y: number
-    mode?: "relative"
+    mode?: "relative" | "absolute"
+    /** Production servers: push x/y as the new head and drop the tail. */
+    advance?: boolean
 }
 
 export interface SnakeMoveExtPacket extends BaseInboundPacket {
@@ -190,7 +196,7 @@ export interface SnakeRotatePacket extends BaseInboundPacket {
     type: "snake_rotate"
     opcode: "e" | "4" | "5" | "3" | "E"
     snakeId: number
-    angle: number
+    angle?: number
     wantedAngle?: number
     speed?: number
 }
@@ -201,6 +207,8 @@ export interface SnakeGrowPacket extends BaseInboundPacket {
     snakeId: number
     x: number
     y: number
+    /** Production servers: x/y is the new head and the tail is kept. */
+    fromHead?: boolean
 }
 
 export interface SnakeGrowExtPacket extends BaseInboundPacket {
@@ -216,6 +224,10 @@ export interface SnakeFullnessPacket extends BaseInboundPacket {
     opcode: "h"
     snakeId: number
     fam: number
+    /** In-game score computed by the production decoder. */
+    score?: number
+    /** Production servers: one tail segment was removed. */
+    removeTail?: boolean
 }
 
 export interface FoodSpawnPacket extends BaseInboundPacket {
@@ -290,6 +302,7 @@ export interface KillStatsPacket extends BaseInboundPacket {
     type: "kill_stats"
     opcode: "k"
     kills: number
+    snakeId?: number
 }
 
 export interface PongPacket extends BaseInboundPacket {

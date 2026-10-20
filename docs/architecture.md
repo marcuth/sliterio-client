@@ -7,7 +7,8 @@ src/
 │   ├── types.ts            Opcodes, packet interfaces, helpers
 │   ├── binary-reader.ts    Big-Endian reader (8/16/24/32-bit, strings)
 │   ├── binary-writer.ts    Big-Endian writer
-│   ├── packet-decoder.ts   bytes -> InboundPacket
+│   ├── packet-decoder.ts   bytes -> InboundPacket (mock / simple format)
+│   ├── production-decoder.ts  stateful decoder for official servers
 │   ├── packet-encoder.ts   OutboundPacket -> bytes
 │   └── secret-resolver.ts  Anti-bot challenge solver
 ├── math/
